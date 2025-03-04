@@ -6,11 +6,11 @@
 
 <br>
 
-<a href="https://github.com/nirholas/erc8004-agent-creator/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge&labelColor=000" alt="Apache 2.0 License" /></a>
-<a href="https://github.com/nirholas/erc8004-agent-creator/stargazers"><img src="https://img.shields.io/github/stars/nirholas/erc8004-agent-creator?style=for-the-badge&logo=github&color=yellow&labelColor=000" alt="Stars" /></a>
-<a href="https://github.com/nirholas/erc8004-agent-creator/network/members"><img src="https://img.shields.io/github/forks/nirholas/erc8004-agent-creator?style=for-the-badge&logo=github&color=purple&labelColor=000" alt="Forks" /></a>
-<a href="https://github.com/nirholas/erc8004-agent-creator/issues"><img src="https://img.shields.io/github/issues/nirholas/erc8004-agent-creator?style=for-the-badge&labelColor=000" alt="Issues" /></a>
-<a href="https://github.com/nirholas/erc8004-agent-creator"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge&labelColor=000" alt="PRs Welcome" /></a>
+<a href="https://github.com/sperax/erc8004-agent-creator/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg?style=for-the-badge&labelColor=000" alt="Apache 2.0 License" /></a>
+<a href="https://github.com/sperax/erc8004-agent-creator/stargazers"><img src="https://img.shields.io/github/stars/nirholas/erc8004-agent-creator?style=for-the-badge&logo=github&color=yellow&labelColor=000" alt="Stars" /></a>
+<a href="https://github.com/sperax/erc8004-agent-creator/network/members"><img src="https://img.shields.io/github/forks/nirholas/erc8004-agent-creator?style=for-the-badge&logo=github&color=purple&labelColor=000" alt="Forks" /></a>
+<a href="https://github.com/sperax/erc8004-agent-creator/issues"><img src="https://img.shields.io/github/issues/nirholas/erc8004-agent-creator?style=for-the-badge&labelColor=000" alt="Issues" /></a>
+<a href="https://github.com/sperax/erc8004-agent-creator"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=for-the-badge&labelColor=000" alt="PRs Welcome" /></a>
 <a href="https://erc8004.agency/"><img src="https://img.shields.io/badge/app-live-00C853?style=for-the-badge&logo=vercel&labelColor=000" alt="Live App" /></a>
 
 <br>
@@ -66,7 +66,7 @@ Visit **[erc8004.agency](https://erc8004.agency/)** → Connect wallet → Selec
 **Option 2: Run locally**
 
 ```bash
-git clone https://github.com/nirholas/erc8004-agent-creator.git
+git clone https://github.com/sperax/erc8004-agent-creator.git
 cd erc8004-agent-creator
 open index.html
 # That's literally it. No npm. No build. No config.
@@ -399,13 +399,13 @@ Contributions welcome! Whether it's a bug fix, new feature, or documentation imp
 2. Create your branch: `git checkout -b feat/my-improvement`
 3. Commit: `git commit -m "✨ feat: add amazing feature"`
 4. Push: `git push origin feat/my-improvement`
-5. [Open a Pull Request](https://github.com/nirholas/erc8004-agent-creator/pulls)
+5. [Open a Pull Request](https://github.com/sperax/erc8004-agent-creator/pulls)
 
 ---
 
 ## 📄 License
 
-Apache 2.0 © [nirholas](https://github.com/nirholas)
+Apache 2.0 © [nirholas](https://github.com/sperax)
 
 ---
 
@@ -418,7 +418,7 @@ Apache 2.0 © [nirholas](https://github.com/nirholas)
   <br>
   ⭐ <b>Found this useful? Star the repo!</b> ⭐<br>
   <sub>It helps others discover ERC-8004 and keeps development active</sub><br><br>
-  <a href="https://github.com/nirholas/erc8004-agent-creator/stargazers">
+  <a href="https://github.com/sperax/erc8004-agent-creator/stargazers">
     <img src="https://img.shields.io/github/stars/nirholas/erc8004-agent-creator?style=social" alt="Star on GitHub">
   </a>
 </p>
