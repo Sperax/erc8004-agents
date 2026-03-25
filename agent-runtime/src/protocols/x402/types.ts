@@ -2,7 +2,7 @@
  * x402 Payment Protocol Types
  *
  * HTTP 402-based micropayment protocol for paying agents per-request.
- * @see https://www.x402.org
+ * @see https://www.x402.org 
  */
 
 // ─── Payment Configuration ─────────────────────────────────────────
