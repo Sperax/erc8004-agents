@@ -18,10 +18,12 @@ PRIVATE_KEY=0x... npx tsx examples/paid-agent/index.ts
 
 ## How x402 Works
 
-1. Client calls `/a2a` without payment header
-2. Server returns **HTTP 402** with payment requirements
-3. Client signs and submits payment via `X-PAYMENT` header
-4. Server verifies payment and processes the request
+1. Client calls `/a2a` (`tasks/send` for a priced skill) without a payment header
+2. Server returns **HTTP 402** with the amount in the token's smallest unit, the token contract, and the payee
+3. Client transfers that amount on-chain, then retries with an `X-PAYMENT` header: the payment terms plus the transfer `txHash`, signed with EIP-712
+4. Server checks the signature, confirms the transfer on-chain (token contract, payer, payee, amount, age), rejects reused transaction hashes, and processes the request
+
+`agent.callAgent()` does steps 3 and 4 for you when you pass `payment: { token, maxAmount }`.
 
 ```bash
 # Step 1: Try without payment (get 402)

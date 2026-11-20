@@ -217,8 +217,9 @@ export class TaskManager extends EventEmitter<TaskManagerEvents> {
 
   /**
    * Resolve which skill/handler to use from the task params.
+   * The x402 middleware prices requests by the same resolution.
    */
-  private resolveSkill(params: TaskSendParams): string | null {
+  resolveSkill(params: TaskSendParams): string | null {
     // Check metadata for explicit skill
     if (params.metadata?.skill) {
       return String(params.metadata.skill);

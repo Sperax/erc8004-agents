@@ -209,6 +209,7 @@ export class ERC8004Agent extends EventEmitter<AgentEvents> {
       chainId: chain.chainId,
       chain: this.config.chain,
       devMode,
+      facilitator: this.facilitator,
       identity: this._identity ?? undefined,
       port,
       hostname,
@@ -373,6 +374,7 @@ export class ERC8004Agent extends EventEmitter<AgentEvents> {
     return callAgent(connection, options, {
       privateKey: this.config.privateKey,
       chainId: chain.chainId,
+      rpcUrl: chain.rpcUrl,
     });
   }
 

@@ -16,7 +16,7 @@ export interface X402PricingConfig {
   token: string;
   /** Token contract address (overrides symbol lookup) */
   tokenAddress?: string;
-  /** Token decimals (default: 6 for USDC, 18 for others) */
+  /** Token decimals (required unless the token is in the bundled BSC table for the agent chain) */
   decimals?: number;
   /** Description of what the payment covers */
   description?: string;
@@ -37,9 +37,9 @@ export interface X402PaymentHeader {
   token: string;
   /** Chain ID */
   chainId: number;
-  /** Transaction hash (after payment) */
-  txHash?: string;
-  /** Signature of the payment intent */
+  /** Hash of the confirmed ERC-20 transfer that paid for this request */
+  txHash: string;
+  /** EIP-712 signature by the payer over every other field */
   signature: string;
   /** Nonce to prevent replay */
   nonce: string;

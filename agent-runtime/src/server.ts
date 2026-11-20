@@ -8,11 +8,13 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import type { AgentCard } from './protocols/a2a/types.js';
-import type { A2ARequest } from './protocols/a2a/types.js';
+import type { A2ARequest, TaskSendParams } from './protocols/a2a/types.js';
 import { A2AHandler } from './protocols/a2a/handler.js';
 import { TaskManager } from './protocols/a2a/taskManager.js';
 import { PricingManager } from './protocols/x402/pricing.js';
 import { createX402Middleware } from './protocols/x402/middleware.js';
+import type { PaymentFacilitator } from './protocols/x402/facilitator.js';
+import { resolveChain } from './utils/chains.js';
 import { createLoggingMiddleware } from './middleware/logging.js';
 import { createRateLimitMiddleware } from './middleware/rateLimit.js';
 import {
@@ -33,6 +35,8 @@ export interface AgentServerConfig {
   chainId: number;
   chain: string;
   devMode?: boolean;
+  /** Facilitator that checks settlements and records receipts */
+  facilitator?: PaymentFacilitator;
   identity?: AgentIdentity;
   port: number;
   hostname: string;
@@ -73,7 +77,22 @@ export function createAgentServer(config: AgentServerConfig) {
       routes: pricedRoutes,
       payeeAddress: config.payeeAddress,
       chainId: config.chainId,
+      chain: resolveChain(config.chain),
+      facilitator: config.facilitator,
       devMode: config.devMode,
+      resolveRoute: async (c) => {
+        if (c.req.method !== 'POST') return null;
+        let body: unknown;
+        try {
+          body = await c.req.json();
+        } catch {
+          return null;
+        }
+        if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
+        const { method, params } = body as { method?: unknown; params?: unknown };
+        if (method !== 'tasks/send' || typeof params !== 'object' || params === null) return null;
+        return config.taskManager.resolveSkill(params as TaskSendParams);
+      },
     }));
   }
 
@@ -120,7 +139,7 @@ export function createAgentServer(config: AgentServerConfig) {
 
       const response = await a2aHandler.handleRequest(request);
       return c.json(response);
-    } catch (error) {
+    } catch {
       return c.json(
         {
           jsonrpc: '2.0',
@@ -128,7 +147,7 @@ export function createAgentServer(config: AgentServerConfig) {
           error: {
             code: -32700,
             message: 'Parse error',
-            data: error instanceof Error ? error.message : 'Invalid JSON',
+            data: 'Invalid JSON',
           },
         },
         400

@@ -56,7 +56,25 @@ Google's protocol for agent messaging and task delegation. Agents can discover e
 
 ### x402 (HTTP 402 Micropayments)
 
-Per-request payment protocol. Configure pricing per endpoint and the middleware handles 402 responses, payment verification, and receipt tracking automatically.
+Per-request payment protocol. Price A2A skills by ID and the middleware handles 402 responses, payment verification, and receipt tracking automatically.
+
+- **Pricing applies to A2A skills.** A `tasks/send` call is priced by the skill it resolves to (`metadata.skill`, a data part's `task`, or a registered skill named in the message text). Other JSON-RPC methods are not charged.
+- **Payments settle on-chain.** The caller transfers the token to the agent, then sends an `X-PAYMENT` header with an EIP-712 signature over the payment terms and the transfer's `txHash`. The agent accepts the request only when that transaction succeeded, emitted a `Transfer` of at least the price from the payer to the payee on the route's token contract, and was mined within the last 10 minutes (`maxPaymentAgeSeconds`).
+- **Each transfer pays for one request.** Reused transaction hashes are rejected. The replay record is kept in memory per process.
+- **Off BSC, set the token contract.** Bundled token addresses cover BSC mainnet and testnet only. On other chains every priced route needs `tokenAddress` and `decimals`, or `start()` throws:
+
+```typescript
+pricing: {
+  "analysis/report": {
+    price: "0.01",
+    token: "USDC",
+    tokenAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    decimals: 6,
+  },
+},
+```
+
+If the chain RPC is unreachable the agent answers `503` with `Retry-After`, and the same payment can be retried.
 
 ### ERC-8004 (On-chain Identity)
 
@@ -75,12 +93,21 @@ const analysts = await agent.discover({
 // Connect to a specific agent
 const targetAgent = await agent.connect("https://agent.example.com");
 
-// Call with automatic x402 payment
+// Call a paid skill. If the agent answers 402, the caller transfers the
+// quoted amount on-chain and retries, but only when the quote matches
+// `token` on the caller's chain and does not exceed `maxAmount`
+// (in the token's smallest unit).
 const result = await agent.callAgent(targetAgent, {
   task: "analysis/report",
   data: { token: "BNB", timeframe: "7d" },
+  payment: {
+    token: "0x64544969ed7EBf5f083679233325356EbE738930",
+    maxAmount: "10000000000000000",
+  },
 });
 ```
+
+Without `payment`, a 402 throws `PaymentRequiredError` with the quote and nothing is paid.
 
 ## Architecture
 

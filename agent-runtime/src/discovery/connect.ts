@@ -5,9 +5,16 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import { ethers } from 'ethers';
 import type { AgentCard, Task, TaskSendParams, A2ARequest, A2AResponse } from '../protocols/a2a/types.js';
-import type { X402PaymentHeader } from '../protocols/x402/types.js';
-import { signPaymentHeader, generateNonce, privateKeyToAddress } from '../utils/crypto.js';
+import type {
+  X402PaymentHeader,
+  X402PaymentMethod,
+  X402PaymentRequired,
+} from '../protocols/x402/types.js';
+import { signPaymentHeader, generateNonce } from '../utils/crypto.js';
+import { ERC20_ABI } from '../utils/contracts.js';
+import { resolveChain } from '../utils/chains.js';
 import { fetchAgentCard } from './search.js';
 
 export interface AgentConnection {
@@ -15,6 +22,13 @@ export interface AgentConnection {
   name: string;
   endpoint: string;
   card: AgentCard;
+}
+
+export interface CallPaymentOptions {
+  /** Token contract address the caller is willing to pay with */
+  token: string;
+  /** Most the caller will pay for this call, in the token's smallest unit */
+  maxAmount: string;
 }
 
 export interface CallOptions {
@@ -26,7 +40,21 @@ export interface CallOptions {
   sessionId?: string;
   /** Timeout in milliseconds */
   timeout?: number;
+  /**
+   * Pay the agent's x402 price when it asks for one, up to `maxAmount`.
+   * Without this, a 402 response throws `PaymentRequiredError`.
+   */
+  payment?: CallPaymentOptions;
 }
+
+export interface CallerConfig {
+  privateKey: string;
+  chainId: number;
+  /** RPC used to send the payment transfer (default: the chain's bundled RPC) */
+  rpcUrl?: string;
+}
+
+const PAYMENT_HEADER_TTL_SECONDS = 300;
 
 /**
  * Connect to a remote ERC-8004 agent.
@@ -49,20 +77,21 @@ export async function connectToAgent(
 }
 
 /**
- * Call a remote agent via A2A with optional x402 payment.
+ * Call a remote agent via A2A.
+ *
+ * When the agent answers 402 and `options.payment` plus `callerConfig` are
+ * given, the caller sends an ERC-20 transfer for the quoted amount (never more
+ * than `payment.maxAmount`), waits for it to be mined, signs an x402 header
+ * bound to the transfer hash, and retries once.
  */
 export async function callAgent(
   connection: AgentConnection,
   options: CallOptions,
-  callerConfig?: {
-    privateKey: string;
-    chainId: number;
-  }
+  callerConfig?: CallerConfig
 ): Promise<Task> {
   const taskId = uuidv4();
   const sessionId = options.sessionId ?? uuidv4();
 
-  // Build A2A request
   const sendParams: TaskSendParams = {
     id: taskId,
     sessionId,
@@ -90,40 +119,30 @@ export async function callAgent(
     params: sendParams,
   };
 
-  // Build headers
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  // Add x402 payment header if the target requires it and we have credentials
-  if (connection.card.erc8004?.x402Support && callerConfig?.privateKey) {
-    const paymentHeader = await buildPaymentHeader(
-      connection,
-      options.task,
-      callerConfig
-    );
-    if (paymentHeader) {
-      headers['X-PAYMENT'] = Buffer.from(
-        JSON.stringify(paymentHeader)
-      ).toString('base64');
-    }
-  }
-
-  // Make the A2A call
   const a2aUrl = `${connection.endpoint}/a2a`;
-  const response = await fetch(a2aUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(a2aRequest),
-    signal: AbortSignal.timeout(options.timeout ?? 30000),
-  });
+  const body = JSON.stringify(a2aRequest);
+  const timeout = options.timeout ?? 30000;
+
+  let response = await postA2A(a2aUrl, body, timeout);
 
   if (response.status === 402) {
-    const paymentRequired = await response.json();
-    throw new PaymentRequiredError(
-      'Payment required',
-      paymentRequired as Record<string, unknown>
-    );
+    const paymentRequired = (await response.json()) as Record<string, unknown>;
+    if (!options.payment || !callerConfig) {
+      throw new PaymentRequiredError('Payment required', paymentRequired);
+    }
+
+    const method = selectPaymentMethod(paymentRequired, options.payment, callerConfig.chainId);
+    if (!method) {
+      throw new PaymentRequiredError('No acceptable payment method within the caller limit', paymentRequired);
+    }
+
+    const header = await payAndSign(method, callerConfig);
+    response = await postA2A(a2aUrl, body, timeout, encodePaymentHeader(header));
+
+    if (response.status === 402) {
+      const rejection = (await response.json()) as Record<string, unknown>;
+      throw new PaymentRequiredError('Payment rejected', { ...rejection, txHash: header.txHash });
+    }
   }
 
   if (!response.ok) {
@@ -142,53 +161,91 @@ export async function callAgent(
   return a2aResponse.result as Task;
 }
 
+function postA2A(url: string, body: string, timeout: number, paymentHeader?: string): Promise<Response> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (paymentHeader) headers['X-PAYMENT'] = paymentHeader;
+  return fetch(url, {
+    method: 'POST',
+    headers,
+    body,
+    signal: AbortSignal.timeout(timeout),
+  });
+}
+
 /**
- * Build an x402 payment header for a request.
+ * Pick the `exact` EVM method on the caller's chain and token whose amount is
+ * within the caller's limit.
  */
-async function buildPaymentHeader(
-  connection: AgentConnection,
-  taskRoute: string,
-  callerConfig: { privateKey: string; chainId: number }
-): Promise<X402PaymentHeader | null> {
-  // Try to get pricing from the agent card
-  const skill = connection.card.skills.find((s) => s.id === taskRoute);
-  if (!skill?.description) return null;
+export function selectPaymentMethod(
+  paymentRequired: Record<string, unknown>,
+  payment: CallPaymentOptions,
+  chainId: number
+): X402PaymentMethod | null {
+  const accepts = (paymentRequired as Partial<X402PaymentRequired>).accepts;
+  if (!Array.isArray(accepts)) return null;
 
-  // Parse price from skill description (e.g., "trading/execute (0.001 USDC/request)")
-  const priceMatch = skill.description.match(/\(([0-9.]+)\s+(\w+)/);
-  if (!priceMatch) return null;
+  let maxAmount: bigint;
+  try {
+    maxAmount = BigInt(payment.maxAmount);
+  } catch {
+    return null;
+  }
 
-  const price = priceMatch[1];
-  const _token = priceMatch[2];
+  for (const method of accepts) {
+    if (
+      method?.scheme === 'exact' &&
+      method.network === 'evm' &&
+      method.chainId === chainId &&
+      typeof method.token === 'string' &&
+      method.token.toLowerCase() === payment.token.toLowerCase() &&
+      typeof method.payee === 'string' &&
+      ethers.isAddress(method.payee) &&
+      typeof method.amount === 'string' &&
+      /^[0-9]{1,78}$/.test(method.amount)
+    ) {
+      const amount = BigInt(method.amount);
+      if (amount > 0n && amount <= maxAmount) return method;
+    }
+  }
+  return null;
+}
 
-  const payer = privateKeyToAddress(callerConfig.privateKey);
-  const payee = connection.card.erc8004?.agentId
-    ? connection.endpoint // Use endpoint as payee reference
-    : connection.endpoint;
+/**
+ * Transfer the quoted amount to the payee and sign a header bound to the
+ * mined transfer.
+ */
+async function payAndSign(
+  method: X402PaymentMethod,
+  callerConfig: CallerConfig
+): Promise<X402PaymentHeader> {
+  const rpcUrl = callerConfig.rpcUrl ?? resolveChain(callerConfig.chainId).rpcUrl;
+  const provider = new ethers.JsonRpcProvider(rpcUrl, callerConfig.chainId, { staticNetwork: true });
+  const wallet = new ethers.Wallet(callerConfig.privateKey, provider);
+  const token = new ethers.Contract(method.token, ERC20_ABI, wallet);
 
-  const nonce = generateNonce();
-  const expiry = Math.floor(Date.now() / 1000) + 300; // 5 minutes
+  const tx = (await token.transfer(method.payee, BigInt(method.amount))) as ethers.ContractTransactionResponse;
+  const receipt = await tx.wait();
+  if (!receipt || receipt.status !== 1) {
+    throw new Error(`x402 payment transfer ${tx.hash} failed`);
+  }
 
   const paymentData = {
-    payer,
-    payee,
-    amount: price,
-    token: _token,
+    payer: wallet.address,
+    payee: method.payee,
+    amount: method.amount,
+    token: method.token,
     chainId: callerConfig.chainId,
-    nonce,
-    expiry,
+    txHash: receipt.hash,
+    nonce: generateNonce(),
+    expiry: Math.floor(Date.now() / 1000) + PAYMENT_HEADER_TTL_SECONDS,
   };
 
-  const signature = await signPaymentHeader(
-    callerConfig.privateKey,
-    paymentData
-  );
+  const signature = await signPaymentHeader(callerConfig.privateKey, paymentData);
+  return { version: '1', ...paymentData, signature };
+}
 
-  return {
-    version: '1',
-    ...paymentData,
-    signature,
-  };
+function encodePaymentHeader(header: X402PaymentHeader): string {
+  return Buffer.from(JSON.stringify(header)).toString('base64');
 }
 
 /**

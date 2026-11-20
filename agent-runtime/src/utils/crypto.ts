@@ -75,71 +75,52 @@ export function privateKeyToAddress(privateKey: string): string {
 }
 
 /**
+ * Fields covered by an x402 payment header signature.
+ * `txHash` binds the signature to the on-chain transfer that paid for the request.
+ */
+export interface PaymentHeaderData {
+  payer: string;
+  payee: string;
+  amount: string;
+  token: string;
+  chainId: number;
+  txHash: string;
+  nonce: string;
+  expiry: number;
+}
+
+const PAYMENT_TYPES = {
+  Payment: [
+    { name: 'payer', type: 'address' },
+    { name: 'payee', type: 'address' },
+    { name: 'amount', type: 'uint256' },
+    { name: 'token', type: 'address' },
+    { name: 'txHash', type: 'bytes32' },
+    { name: 'nonce', type: 'bytes32' },
+    { name: 'expiry', type: 'uint256' },
+  ],
+};
+
+function paymentDomain(chainId: number): ethers.TypedDataDomain {
+  return { name: 'x402Payment', version: '1', chainId };
+}
+
+/**
  * Sign an x402 payment header.
  */
 export async function signPaymentHeader(
   privateKey: string,
-  paymentData: {
-    payer: string;
-    payee: string;
-    amount: string;
-    token: string;
-    chainId: number;
-    nonce: string;
-    expiry: number;
-  }
+  paymentData: PaymentHeaderData
 ): Promise<string> {
-  const domain: ethers.TypedDataDomain = {
-    name: 'x402Payment',
-    version: '1',
-    chainId: paymentData.chainId,
-  };
-
-  const types = {
-    Payment: [
-      { name: 'payer', type: 'address' },
-      { name: 'payee', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-      { name: 'token', type: 'address' },
-      { name: 'nonce', type: 'bytes32' },
-      { name: 'expiry', type: 'uint256' },
-    ],
-  };
-
-  return signTypedData(privateKey, domain, types, paymentData);
+  return signTypedData(privateKey, paymentDomain(paymentData.chainId), PAYMENT_TYPES, { ...paymentData });
 }
 
 /**
- * Verify an x402 payment header signature.
+ * Verify an x402 payment header signature and return the recovered signer.
  */
 export function verifyPaymentHeader(
-  paymentData: {
-    payer: string;
-    payee: string;
-    amount: string;
-    token: string;
-    chainId: number;
-    nonce: string;
-    expiry: number;
-  },
+  paymentData: PaymentHeaderData,
   signature: string
 ): string {
-  const domain: ethers.TypedDataDomain = {
-    name: 'x402Payment',
-    version: '1',
-    chainId: paymentData.chainId,
-  };
-
-  const types = {
-    Payment: [
-      { name: 'payer', type: 'address' },
-      { name: 'payee', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-      { name: 'token', type: 'address' },
-      { name: 'nonce', type: 'bytes32' },
-      { name: 'expiry', type: 'uint256' },
-    ],
-  };
-
-  return verifyTypedData(domain, types, paymentData, signature);
+  return verifyTypedData(paymentDomain(paymentData.chainId), PAYMENT_TYPES, { ...paymentData }, signature);
 }

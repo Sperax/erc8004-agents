@@ -7,6 +7,7 @@
 import type { X402PricingConfig, TokenConfig } from './types.js';
 import { BSC_TOKENS, BSC_TESTNET_TOKENS } from './types.js';
 import type { PricingConfig } from '../erc8004/types.js';
+import { formatUnits, parseUnits } from 'ethers';
 
 export class PricingManager {
   private readonly routes: Map<string, X402PricingConfig> = new Map();
@@ -71,34 +72,39 @@ export class PricingManager {
    * Convert human-readable price to smallest unit.
    */
   toSmallestUnit(price: string, decimals: number): string {
-    const amount = parseFloat(price);
-    return BigInt(Math.floor(amount * 10 ** decimals)).toString();
+    return parseUnits(price, decimals).toString();
   }
 
   /**
    * Convert smallest unit to human-readable price.
    */
   toHumanReadable(amount: string, decimals: number): string {
-    const value = Number(BigInt(amount)) / 10 ** decimals;
-    return value.toString();
+    return formatUnits(BigInt(amount), decimals).replace(/\.0$/, '');
   }
 
   /**
    * Resolve a token address from symbol based on chain.
    */
   private resolveTokenAddress(symbol: string): string | undefined {
-    const tokens = this.chainId === 97 ? BSC_TESTNET_TOKENS : BSC_TOKENS;
-    return tokens[symbol.toUpperCase()]?.address;
+    return this.knownToken(symbol)?.address;
   }
 
   /**
-   * Resolve token decimals from symbol.
+   * Resolve token decimals from symbol. Unknown tokens have no default:
+   * the route must set `decimals` explicitly.
    */
-  private resolveTokenDecimals(symbol: string): number {
-    // Most BSC tokens use 18 decimals
-    const stablecoins = ['USDC', 'USDT', 'BUSD', 'DAI'];
-    if (stablecoins.includes(symbol.toUpperCase())) return 18; // BSC uses 18 for these
-    return 18;
+  private resolveTokenDecimals(symbol: string): number | undefined {
+    return this.knownToken(symbol)?.decimals;
+  }
+
+  /**
+   * Built-in token table for the agent's chain. Only BSC mainnet and testnet
+   * are bundled; routes on other chains must set `tokenAddress` and `decimals`.
+   */
+  private knownToken(symbol: string): TokenConfig | undefined {
+    const tokens =
+      this.chainId === 56 ? BSC_TOKENS : this.chainId === 97 ? BSC_TESTNET_TOKENS : undefined;
+    return tokens?.[symbol.toUpperCase()];
   }
 
   private normalizeRoute(route: string): string {

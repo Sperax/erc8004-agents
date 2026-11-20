@@ -62,6 +62,7 @@ export { A2A_ERROR_CODES } from './protocols/a2a/types.js';
 export { createX402Middleware } from './protocols/x402/middleware.js';
 export type { X402MiddlewareConfig } from './protocols/x402/middleware.js';
 export { PaymentFacilitator } from './protocols/x402/facilitator.js';
+export type { SettledTransfer, SettlementQuery } from './protocols/x402/facilitator.js';
 export { PricingManager } from './protocols/x402/pricing.js';
 export type {
   X402PricingConfig,
@@ -100,8 +101,8 @@ export type {
 // ─── Discovery ────────────────────────────────────────────────────
 export { searchAgents, fetchAgentCard } from './discovery/search.js';
 export type { DiscoveryQuery, DiscoveredAgent } from './discovery/search.js';
-export { connectToAgent, callAgent, PaymentRequiredError, A2ACallError } from './discovery/connect.js';
-export type { AgentConnection, CallOptions } from './discovery/connect.js';
+export { connectToAgent, callAgent, selectPaymentMethod, PaymentRequiredError, A2ACallError } from './discovery/connect.js';
+export type { AgentConnection, CallOptions, CallPaymentOptions, CallerConfig } from './discovery/connect.js';
 
 // ─── Middleware ───────────────────────────────────────────────────
 export { createAuthMiddleware } from './middleware/auth.js';
